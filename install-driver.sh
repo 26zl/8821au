@@ -45,9 +45,7 @@ MODULE_NAME="8821au"
 SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)"
 DRV_DIR="$SCRIPT_DIR"
 
-# Single source of truth: derive name/version from dkms.conf so a version bump
-# only needs editing there. Literal fallbacks keep the script working if the
-# dkms.conf read ever fails.
+# Derive name/version from dkms.conf; literal fallbacks if the read fails.
 DRV_NAME="$(sed -n 's/^PACKAGE_NAME="\(.*\)"/\1/p' "$SCRIPT_DIR/dkms.conf" 2>/dev/null)"
 DRV_NAME="${DRV_NAME:-rtl8821au}"
 DRV_VERSION="$(sed -n 's/^PACKAGE_VERSION="\(.*\)"/\1/p' "$SCRIPT_DIR/dkms.conf" 2>/dev/null)"
@@ -109,8 +107,6 @@ do
     shift
 done
 
-# Work from the driver source tree regardless of the caller's directory, so the
-# relative make/cp steps below match the script-dir-based DRV_DIR.
 cd "$SCRIPT_DIR" || exit 1
 
 # set default editor
@@ -378,6 +374,8 @@ else
 # 	the dkms add command requires source in /usr/src/${DRV_NAME}-${DRV_VERSION}
 	echo "Copying source files to /usr/src/${DRV_NAME}-${DRV_VERSION}"
 	cp -r "${DRV_DIR}" /usr/src/"${DRV_NAME}-${DRV_VERSION}"
+	# dkms only needs the driver source; drop the VCS dir from the copy.
+	rm -rf /usr/src/"${DRV_NAME}-${DRV_VERSION}/.git"
 
 
 # run dkms add
@@ -514,10 +512,10 @@ if [ $NO_PROMPT -ne 1 ]; then
 		*) ${TEXT_EDITOR} /etc/modprobe.d/${OPTIONS_FILE} ;;
 	esac
 
-	printf "Do you want to apply the new options by rebooting now? (recommended) [Y/n] "
+	printf "Do you want to apply the new options by rebooting now? [y/N] "
 	read -r yn
 	case "$yn" in
-		[nN]) ;;
-		*) reboot ;;
+		[yY]) reboot ;;
+		*) ;;
 	esac
 fi

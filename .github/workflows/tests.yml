@@ -1,0 +1,25 @@
+name: tests
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ final, work-in-progress ]
+    paths: [ '**.sh', '.github/workflows/tests.yml' ]
+  pull_request:
+    branches: [ final, work-in-progress ]
+    paths: [ '**.sh', '.github/workflows/tests.yml' ]
+
+jobs:
+  shell-logic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run shell logic tests
+        run: |
+          for t in tests/*.sh; do
+            echo "== $t =="
+            sh "$t"
+          done

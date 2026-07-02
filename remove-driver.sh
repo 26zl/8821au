@@ -35,8 +35,7 @@ MODULE_NAME="8821au"
 
 SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)"
 
-# Single source of truth: derive name/version from dkms.conf (literal fallbacks
-# if the read fails) so they can't drift from the installer or dkms.conf.
+# Derive name/version from dkms.conf; literal fallbacks if the read fails.
 DRV_NAME="$(sed -n 's/^PACKAGE_NAME="\(.*\)"/\1/p' "$SCRIPT_DIR/dkms.conf" 2>/dev/null)"
 DRV_NAME="${DRV_NAME:-rtl8821au}"
 DRV_VERSION="$(sed -n 's/^PACKAGE_VERSION="\(.*\)"/\1/p' "$SCRIPT_DIR/dkms.conf" 2>/dev/null)"
@@ -57,8 +56,6 @@ NM_CONF="/etc/NetworkManager/conf.d/10-unmanaged-8821au.conf"
 UDEV_RULE="/etc/udev/rules.d/90-8821au-monitor.rules"
 CONNMAN_MARKER="/etc/connman/.8821au-monitor-marker"
 
-# Tracks whether any removal step failed, so the final message is honest instead
-# of always claiming success.
 REMOVE_FAILED=0
 
 command_exists() {
@@ -79,9 +76,6 @@ find_8821au_iface() {
 		esac
 	done
 
-	# No blind fallback: re-managing an arbitrary unrelated adapter is worse than
-	# doing nothing. Removing NM_CONF already restores default management for our
-	# device on the next reload.
 	return 1
 }
 
@@ -103,9 +97,8 @@ remove_monitor_helper() {
 	if [ -f "$CONNMAN_MARKER" ]; then
 		marker_iface="$(cat "$CONNMAN_MARKER" 2>/dev/null || true)"
 		if [ -n "$marker_iface" ] && [ -f /etc/connman/main.conf ]; then
-			# Remove only the exact interface token from the comma-separated
-			# blacklist, leaving other interfaces' config intact. A substring
-			# sed would turn e.g. eth0,wlan10,wlan1 into eth00 when removing wlan1.
+			# Remove only the exact interface token (not substrings) from the
+			# comma-separated blacklist.
 			if awk -v iface="$marker_iface" '
 					/^NetworkInterfaceBlacklist=/ {
 						n = split(substr($0, index($0, "=") + 1), a, ",")
@@ -154,8 +147,6 @@ if [ "$(id -u)" -ne 0 ]; then
 	exit 1
 fi
 
-# Work from the driver source tree regardless of the caller's directory, so the
-# cleanup target below never runs in an unrelated directory.
 cd "$SCRIPT_DIR" || exit 1
 
 print_usage() {
@@ -282,10 +273,10 @@ echo ": ---------------------------"
 echo
 
 if [ $NO_PROMPT -ne 1 ]; then
-	printf "Do you want to reboot now? (recommended) [Y/n] "
+	printf "Do you want to reboot now? [y/N] "
 	read -r yn
 	case "$yn" in
-		[nN]) ;;
-		*) reboot ;;
+		[yY]) reboot ;;
+		*) ;;
 	esac
 fi

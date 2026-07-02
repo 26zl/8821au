@@ -64,14 +64,13 @@ else
 fi
 
 
-# Only offer to reboot when running interactively; a closed/non-tty stdin
-# (EOF) must not fall through to an unconfirmed reboot.
+# Only offer to reboot when interactive.
 if [ -t 0 ]; then
-	printf "Do you want to apply the new options by rebooting now? (recommended) [Y/n] "
+	printf "Do you want to apply the new options by rebooting now? [y/N] "
 	if read -r yn; then
 		case "$yn" in
-			[nN]) ;;
-			*) reboot ;;
+			[yY]) reboot ;;
+			*) ;;
 		esac
 	fi
 fi

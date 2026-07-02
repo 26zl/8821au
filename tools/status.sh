@@ -11,15 +11,10 @@
 #
 # $ sudo ./tools/status.sh
 
-SCRIPT_NAME="tools/status.sh"
 MODULE_NAME="8821au"
 SERVICE="wlan-monitor-8821au.service"
 
-if [ "$(id -u)" -ne 0 ]; then
-	echo "You must run this script with superuser (root) privileges."
-	echo "Try: \"sudo ./${SCRIPT_NAME}\""
-	exit 1
-fi
+# Read-only diagnostics; no root required.
 
 echo "===== 8821au Status ====="
 echo

@@ -40,6 +40,7 @@ fi
 
 IFACE="$1"
 BAND="${2:-both}"
+BAND="${BAND,,}"   # normalize case so 5GHz, 5Ghz, 5ghz all work
 DWELL="${3:-0.5}"
 
 if ! ip link show "$IFACE" >/dev/null 2>&1; then
@@ -47,7 +48,7 @@ if ! ip link show "$IFACE" >/dev/null 2>&1; then
   exit 1
 fi
 
-# Validate dwell so a typo doesn't abort mid-loop with a cryptic 'sleep' error.
+# Validate dwell (must be a positive number).
 if ! [[ "$DWELL" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
   echo "Dwell must be a number in seconds, e.g. 0.5 or 1." >&2
   exit 1
@@ -57,8 +58,7 @@ if ! awk -v dwell="$DWELL" 'BEGIN { exit(dwell > 0 ? 0 : 1) }'; then
   exit 1
 fi
 
-# Require monitor mode up front. Otherwise every 'iw set channel' fails, the
-# error is swallowed by 2>/dev/null below, and the loop spins silently forever.
+# Require monitor mode up front.
 if ! iw dev "$IFACE" info 2>/dev/null | grep -q "type monitor"; then
   echo "Interface '$IFACE' is not in monitor mode." >&2
   echo "Enable it first, e.g.: sudo TARGET_IFACE=$IFACE ./tools/monitor-mode.sh" >&2
@@ -72,11 +72,11 @@ CHANNELS_24="1 2 3 4 5 6 7 8 9 10 11 12 13"
 CHANNELS_5="36 40 44 48 52 56 60 64 100 104 108 112 116 120 124 128 132 136 140 144 149 153 157 161 165"
 
 case "$BAND" in
-  2.4|2.4ghz|2.4GHz|24)
+  2.4|2.4ghz|24)
     CHANNELS="$CHANNELS_24"
     BAND_LABEL="2.4 GHz"
     ;;
-  5|5ghz|5GHz)
+  5|5ghz)
     CHANNELS="$CHANNELS_5"
     BAND_LABEL="5 GHz"
     ;;

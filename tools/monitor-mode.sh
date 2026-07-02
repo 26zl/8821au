@@ -30,8 +30,7 @@ fi
 
 TARGET_IFACE="${TARGET_IFACE:-}"
 
-# Kernel driver name for the udev hot-plug rule, sourced from dkms.conf so it
-# tracks the package name, with a literal fallback if the read fails.
+# Driver name for the udev rule, from dkms.conf; literal fallback if read fails.
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 DRV_NAME="$(sed -n 's/^PACKAGE_NAME="\(.*\)"/\1/p' "$SCRIPT_DIR/../dkms.conf" 2>/dev/null)"
 DRV_NAME="${DRV_NAME:-rtl8821au}"
@@ -73,8 +72,6 @@ find_8821au_iface() {
       return 0
     fi
   done
-  # Avoid guessing. Putting a random wlan/wlp interface into monitor mode can
-  # break the user's primary Wi-Fi connection; ask for TARGET_IFACE instead.
   return 1
 }
 
@@ -96,8 +93,7 @@ NET_MANAGER="$(detect_net_manager)"
 echo "[monitor_mode] Detected network manager: $NET_MANAGER"
 echo "[monitor_mode] Configuring monitor helper for interface '$SELECTED_IFACE' (channel $CHANNEL)."
 
-# From here on we write privileged files (helper, NM/connman config, unit, udev
-# rule). If any step fails, the install is partial — point the user at teardown.
+# From here on we write privileged files.
 on_error() {
   echo "[monitor_mode] Setup failed partway through; some files may have been written." >&2
   echo "[monitor_mode] Run 'sudo ./remove-driver.sh' to clean up, then retry." >&2
@@ -127,8 +123,6 @@ find_iface() {
       return 0
     fi
   done
-  # Avoid guessing. Putting a random wlan/wlp interface into monitor mode can
-  # break the user's primary Wi-Fi connection; ask for TARGET_IFACE instead.
   return 1
 }
 
@@ -224,10 +218,17 @@ chmod +x "$HELPER_PATH"
 case "$NET_MANAGER" in
   NetworkManager)
     mkdir -p /etc/NetworkManager/conf.d
+    # Match by MAC so the rule survives an interface rename; fall back to name.
+    IFACE_MAC="$(cat "/sys/class/net/${SELECTED_IFACE}/address" 2>/dev/null || true)"
+    if [[ -n "$IFACE_MAC" ]]; then
+      NM_MATCH="mac:${IFACE_MAC}"
+    else
+      NM_MATCH="interface-name:${SELECTED_IFACE}"
+    fi
     cat <<EOF > "$NM_CONF_PATH"
 [keyfile]
 # Automatically managed by monitor-mode.sh
-unmanaged-devices=interface-name:${SELECTED_IFACE}
+unmanaged-devices=${NM_MATCH}
 EOF
     systemctl reload NetworkManager.service 2>/dev/null || systemctl try-restart NetworkManager.service 2>/dev/null || true
     ;;
@@ -239,9 +240,8 @@ EOF
     CONNMAN_CONF="/etc/connman/main.conf"
     if [ -f "$CONNMAN_CONF" ]; then
       if grep -q "^NetworkInterfaceBlacklist" "$CONNMAN_CONF"; then
-        # Append only if the iface is not already an exact comma-separated token
-        # on the blacklist line (a plain substring grep would treat wlan1 as
-        # already-present when only wlan10 is listed).
+        # Append only if the iface isn't already an exact token (not substring)
+        # on the blacklist line.
         if ! awk -v iface="$SELECTED_IFACE" '
               /^NetworkInterfaceBlacklist=/ {
                 n = split(substr($0, index($0, "=") + 1), a, ",")
@@ -249,10 +249,7 @@ EOF
               }
               END { exit(found ? 0 : 1) }
             ' "$CONNMAN_CONF"; then
-          # Append in place so main.conf keeps its owner/mode/SELinux context.
-          # A mktemp in /tmp + cross-filesystem mv would reset them to
-          # 0600/root/tmp_t and can make connman unable to read its own config.
-          # Interface names are alphanumeric, so no sed metachars to escape.
+          # Append in place to preserve main.conf's owner/mode/SELinux context.
           sed -i "/^NetworkInterfaceBlacklist=/ s/\$/,${SELECTED_IFACE}/" "$CONNMAN_CONF"
         fi
       else
@@ -284,8 +281,7 @@ esac
 cat > "$UNIT_PATH" <<EOF
 [Unit]
 Description=Put Realtek 8821au adapter into monitor mode at boot
-After=systemd-udev-settle.service${AFTER_SERVICE:+ $AFTER_SERVICE}
-Wants=systemd-udev-settle.service
+${AFTER_SERVICE:+After=$AFTER_SERVICE}
 
 [Service]
 Type=oneshot
@@ -318,9 +314,7 @@ EOF
 udevadm control --reload-rules 2>/dev/null || true
 
 systemctl daemon-reload
-# Enable persistently first, then start best-effort: a oneshot 'start' fails if
-# the adapter isn't ready yet, but the install itself is complete and the udev
-# rule will start it on the next plug-in/boot.
+# Enable persistently; start best-effort (adapter may not be ready yet).
 systemctl enable wlan-monitor-8821au.service
 trap - ERR
 if ! systemctl start wlan-monitor-8821au.service; then
