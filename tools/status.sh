@@ -11,7 +11,9 @@
 #
 # $ sudo ./tools/status.sh
 
-MODULE_NAME="8821au"
+# This driver, or the in-kernel rtw88 one that tools/monitor-mode.sh also
+# accepts (8821au.conf blacklists it, so only one is ever loaded).
+MODULE_NAMES="8821au|rtw88_8821au"
 SERVICE="wlan-monitor-8821au.service"
 
 # Read-only diagnostics; no root required.
@@ -21,8 +23,9 @@ echo
 
 # Driver module
 printf "Driver module: "
-if lsmod | awk '{print $1}' | grep -qx "$MODULE_NAME"; then
-	echo "LOADED"
+loaded_mod="$(lsmod | awk '{print $1}' | grep -xE "$MODULE_NAMES" | head -n1)"
+if [ -n "$loaded_mod" ]; then
+	echo "LOADED ($loaded_mod)"
 else
 	echo "NOT LOADED"
 fi

@@ -105,7 +105,9 @@ cat <<'HELPER' > "$HELPER_PATH"
 #!/usr/bin/env bash
 set -euo pipefail
 
-LOG() { echo "[wlan-monitor-8821au] $*"; }
+# stderr: wait_for_iface() runs inside a command substitution, so anything on
+# stdout would be captured as the interface name.
+LOG() { echo "[wlan-monitor-8821au] $*" >&2; }
 command_exists() { command -v "$1" >/dev/null 2>&1; }
 
 CHANNEL="${CHANNEL:-1}"
@@ -169,7 +171,8 @@ main() {
 
   command_exists rfkill && rfkill unblock wifi || true
 
-  if command_exists rfkill && rfkill list 2>/dev/null | grep -q "Hard blocked: yes"; then
+  # Scoped to wifi: a hard-blocked Bluetooth radio is unrelated and must not abort.
+  if command_exists rfkill && rfkill list wifi 2>/dev/null | grep -q "Hard blocked: yes"; then
     LOG "Adapter is hard-blocked (hardware switch). Enable Wi‑Fi and retry."
     exit 1
   fi
@@ -308,8 +311,9 @@ echo "[monitor_mode] Installing udev rule for hot-plug support..."
 SYSTEMCTL_PATH="$(command -v systemctl)"
 cat > "$UDEV_RULE_PATH" <<EOF
 # Automatically restart the monitor-mode service when the 8821au adapter is plugged in.
+# rtw_8821au is the in-kernel rtw88 driver, which the helper also detects.
 # Managed by monitor-mode.sh - do not edit manually.
-ACTION=="add", SUBSYSTEM=="net", DRIVERS=="${DRV_NAME}", RUN+="$SYSTEMCTL_PATH --no-block restart wlan-monitor-8821au.service"
+ACTION=="add", SUBSYSTEM=="net", DRIVERS=="${DRV_NAME}|rtw_8821au", RUN+="$SYSTEMCTL_PATH --no-block restart wlan-monitor-8821au.service"
 EOF
 udevadm control --reload-rules 2>/dev/null || true
 
